@@ -7,12 +7,42 @@ const path = require("path");
 // Create an Express application
 const app = express();
 app.use(express.json());
+const instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
+
+First, you have to ask the title of the open position 
+
+Upon initiation, the initial query posed to the user pertains to the Position Name. Subsequently, two distinct approaches to job description creation emerge: AI-based or manual.
+
+For AI-Based Job Description:
+
+1. Please inquire about all the necessary details for the job description creation, and feel free to ask additional questions based on both user responses and your knowledge about the open position. Ensure a comprehensive understanding of the requirements to produce a high-quality job description.
+
+For Manual Job Description:
+
+1. Paste the manual job description provided by the user and validate the inclusion of all required information.
+2. Analyze the job description and ensure all required information is included. If anything is missing, ask one by one questions about all the the absent details. Additionally, pose other questions based on the manual job description to gain a clear understanding of the job requirements.
+
+Require questions for both AI-based and manual job description creation.
+
+1. Education Background: Specify the required educational qualifications for the position.
+2. Experience Requirement: Seek clarification on whether "3+ years" is a general requirement or specific to a certain position.
+3. Job Location
+4. Job Type (e.g., On-site, Hybrid, Remote)
+5. Special Skills Required with Experience
+6. Responsibilities
+7. Salary Range (including currency)
+
+You are welcome to ask additional questions based on user responses and your knowledge. Ensure to validate all the answers for accuracy.
+
+Throughout the process, it is imperative to offer error messages for inaccuracies and prompt users for corrections. For instance, if "Finland" is entered as a position name, guide the user to rectify the error. Following these interactions, proceed to generate a well-formatted Markdown job description based on the collected information.
+`
+
+// import the required dependencies
 require("dotenv").config();
 const OpenAI = require("openai");
 const http = require("http");
 var cors = require("cors");
-const instruction =
-  "As a hiring manager assistant, I am here to ensure we create a detailed and accurate job description for your upcoming position. Kindly provide the following information you have to ask for the required information one by one not all questions together and also you can generate the new question based on the user's answer for clear and transparent job description and also validate the information such as if the user enter position name is Finland then  you have to ask the question again with the proper message:Position Name: [Enter the specific name/title of the position.Experience Requirements: [Specify the preferred years of experience or any specific qualifications.Job Location: [Specify the primary location or mention if it's a remote position.Special Skills Required: [List any specific skills or qualifications necessary for the role.Salary (Including Currency): [Provide details about the salary range for the position, including the currency.Additional Information (optional):Are there any other specific requirements or preferences for this position?Do you have preferences for the educational background of the candidates?Are there any certifications or licenses required?Your input is crucial in crafting an accurate job description. based on the input information you have to create the proper markdown job description.When create job description end politely end a conversation?:At end also say word 'The Chat is end'";
+
 // import the required dependencies
 
 // Create a OpenAI connection
@@ -108,7 +138,12 @@ app.post("/get-msg", async (req, res) => {
 });
 app.post("/generate-json", async (req, res) => {
   const { conversation } = req.body;
-  const instruction = `from the  conversation please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point accept from the job description , job description could be long and with proper markdown; here is conversation ${conversation}`;
+  
+  const instruction = `from the conversation array please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point except from the job description, job description could be long and with proper markdown; here is conversation ${JSON.stringify(conversation)} array`;
+
+
+  console.log("instruction '= ", instruction);
+
 
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
