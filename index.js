@@ -1,19 +1,20 @@
 // Import required modules
 const express = require("express");
-
+const multer = require("multer");
+const fs = require("fs");
+const fsPromise = require("fs").promises; // Using promises version of fs
+const path = require("path");
 // Create an Express application
 const app = express();
 app.use(express.json());
-const instruction="As a hiring manager assistant, I am here to ensure we create a detailed and accurate job description for your upcoming position. Kindly provide the following information you have to ask for the required information one by one not all questions together and also you can generate the new question based on the user's answer for clear and transparent job description and also validate the information such as if the user enter position name is Finland then  you have to ask the question again with the proper message:Position Name: [Enter the specific name/title of the position.Experience Requirements: [Specify the preferred years of experience or any specific qualifications.Job Location: [Specify the primary location or mention if it's a remote position.Special Skills Required: [List any specific skills or qualifications necessary for the role.Salary (Including Currency): [Provide details about the salary range for the position, including the currency.Additional Information (optional):Are there any other specific requirements or preferences for this position?Do you have preferences for the educational background of the candidates?Are there any certifications or licenses required?Your input is crucial in crafting an accurate job description. based on the input information you have to create the proper markdown job description.When create job description end politely end a conversation?:At end also say word 'The Chat is end'"
-// import the required dependencies
 require("dotenv").config();
 const OpenAI = require("openai");
-const readline = require("readline").createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
 const http = require("http");
 var cors = require("cors");
+const instruction =
+  "As a hiring manager assistant, I am here to ensure we create a detailed and accurate job description for your upcoming position. Kindly provide the following information you have to ask for the required information one by one not all questions together and also you can generate the new question based on the user's answer for clear and transparent job description and also validate the information such as if the user enter position name is Finland then  you have to ask the question again with the proper message:Position Name: [Enter the specific name/title of the position.Experience Requirements: [Specify the preferred years of experience or any specific qualifications.Job Location: [Specify the primary location or mention if it's a remote position.Special Skills Required: [List any specific skills or qualifications necessary for the role.Salary (Including Currency): [Provide details about the salary range for the position, including the currency.Additional Information (optional):Are there any other specific requirements or preferences for this position?Do you have preferences for the educational background of the candidates?Are there any certifications or licenses required?Your input is crucial in crafting an accurate job description. based on the input information you have to create the proper markdown job description.When create job description end politely end a conversation?:At end also say word 'The Chat is end'";
+// import the required dependencies
+
 // Create a OpenAI connection
 const secretKey = process.env.OPENAI_API_KEY;
 const openai = new OpenAI({
@@ -22,46 +23,74 @@ const openai = new OpenAI({
 app.use(cors());
 let assistant = null;
 let thread = null;
+let assistantId;
 app.get("/create-assistant", async (req, res) => {
-  console.log("/create-assistant");
-  assistant = await openai.beta.assistants.create({
-    name: "Hiring manager ASSISTANT",
-    instructions:
-    instruction,
-    model: "gpt-3.5-turbo-16k",
-  });
-  res.status(200).json("Assistant Is created");
+  const assistantFilePath = "./assistant.json";
+  // Check if the assistant.json file exists
+  try {
+    const folderPath = path.join(__dirname, "uploads");
+    const assistantFilePath = path.join(folderPath, file.originalname);
+    const assistantData = await fsPromise.readFile(assistantFilePath, "utf8");
+    let assistantDetails = JSON.parse(assistantData);
+    assistantId = assistantDetails.assistantId;
+    console.log("\nExisting assistant detected.\n");
+  } catch (error) {
+    // If file does not exist or there is an error in reading it, create a new assistant
+    console.log("No existing assistant detected, creating new.\n");
+    const assistantConfig = {
+      name: "Hiring Manager Assistant",
+      instructions: instruction,
+      tools: [{ type: "retrieval" }], // configure the retrieval tool to retrieve files in the future
+      model: "gpt-4-1106-preview",
+    };
+
+    const assistant = await openai.beta.assistants.create(assistantConfig);
+    assistantDetails = { assistantId: assistant.id, ...assistantConfig };
+
+    // Save the assistant details to assistant.json
+    await fsPromise.writeFile(
+      assistantFilePath,
+      JSON.stringify(assistantDetails, null, 2)
+    );
+    assistantId = assistantDetails.assistantId;
+    res.status(200).json("Assistant Is created");
+  }
 });
-app.get("/create-thread", async (req,res) => {
+app.get("/create-thread", async (req, res) => {
+  console.log("/create-thread");
   // Create a thread
   thread = await openai.beta.threads.create();
-  res.status(200).json("Thread Is created");
+  res.status(200).json({ threadId: thread });
 });
 
 app.post("/get-msg", async (req, res) => {
   const { msg } = req.body;
+  const { threadId } = req.body;
   try {
+    const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
+    let assistantDetails = JSON.parse(assistantData);
+    let assistantId1 = assistantDetails.assistantId;
     // Pass in the user question into the existing thread
-    await openai.beta.threads.messages.create(thread.id, {
+    await openai.beta.threads.messages.create(threadId, {
       role: "user",
       content: msg,
     });
-
     // Use runs to wait for the assistant response and then retrieve it
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistant.id,
+    const run = await openai.beta.threads.runs.create(threadId, {
+      assistant_id: assistantId1,
     });
-
-    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-
+    let runStatus = await openai.beta.threads.runs.retrieve(
+      threadId,
+      run.id
+    );
     // Polling mechanism to see if runStatus is completed
     // This should be made more robust.
     while (runStatus.status !== "completed") {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
     }
     // Get the last assistant message from the messages array
-    const messages = await openai.beta.threads.messages.list(thread.id);
+    const messages = await openai.beta.threads.messages.list(threadId);
     // Find the last message for the current run
     const lastMessageForRun = messages.data
       .filter(
@@ -69,7 +98,7 @@ app.post("/get-msg", async (req, res) => {
       )
       .pop();
 
-    // If an assistant message is found, console.log() it
+    // If an assistant message is found,  it
     if (lastMessageForRun) {
       res.status(200).json(`${lastMessageForRun.content[0].text.value} \n`);
     }
@@ -77,29 +106,188 @@ app.post("/get-msg", async (req, res) => {
     console.error(error);
   }
 });
-app.post("/generate-json",async(req,res)=>{
+app.post("/generate-json", async (req, res) => {
   const { conversation } = req.body;
-const instruction=`from the  conversation please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point accept from the job description , job description could be long and with proper markdown; here is conversation ${conversation}`
+  const instruction = `from the  conversation please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point accept from the job description , job description could be long and with proper markdown; here is conversation ${conversation}`;
 
-
-const response = await openai.chat.completions.create({
-  model: "gpt-3.5-turbo",
-  messages: [
-    {
-      "role": "user",
-      "content":instruction
-    }
-  ],
-  temperature: 1,
-  max_tokens: 256,
-  top_p: 1,
-  frequency_penalty: 0,
-  presence_penalty: 0,
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      {
+        role: "user",
+        content: instruction,
+      },
+    ],
+    temperature: 1,
+    max_tokens: 256,
+    top_p: 1,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+  });
+  console.log("response", response);
+  res.status(200).json(response);
 });
-console.log("response",response)
-res.status(200).json(response);
+const multerStorage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    try {
+      const uploadFolder = "uploads";
+      cb(null, "uploads");
 
-})
+      // const ext = file.mimetype.split("/")[1];
+      // const folderPath = "D:/open-ai-assitant/uploads";
+      // const assistantFilePath = path.join(folderPath, file.originalname);
+
+      const ext = file.mimetype.split("/")[1];
+ 
+      const folderPath = path.join(__dirname, "uploads");
+      const assistantFilePath = path.join(folderPath, file.originalname);
+      const uploadedFile = await openai.files.create({
+        file: fs.createReadStream(assistantFilePath),
+        purpose: "assistants",
+      });
+      const assistantData = await fsPromise.readFile(
+        "./assistant.json",
+        "utf8"
+      );
+      let assistantDetails = JSON.parse(assistantData);
+      // Retrieve existing file IDs from assistant.json to not overwrite
+      let existingFileIds = assistantDetails.file_ids || [];
+      // Update the assistant with the new file ID
+
+      await openai.beta.assistants.update(assistantDetails.assistantId, {
+        file_ids: [...existingFileIds, uploadedFile.id],
+      });
+      // Update local assistantDetails and save to assistant.json
+      assistantDetails.file_ids = [...existingFileIds, uploadedFile.id];
+      await fsPromise.writeFile(
+        assistantFilePath,
+        JSON.stringify(assistantDetails, null, 2)
+      );
+    } catch (error) {
+      console.error("Error during file upload:", error);
+    }
+  },
+  filename: (req, file, cb) => {
+    // Combine the Date in milliseconds and original name and pass as filename
+    cb(null, `${file.originalname}`);
+  },
+});
+
+// Use diskstorage option in multer
+const upload = multer({ storage: multerStorage });
+
+// Create a POST endpoint for '/upload' route
+app.post("/upload", upload.single("file"), (req, res) => {
+  res.status(200).json("File successfully uploaded");
+});
+
+app.get("/files", (req, res) => {
+  const folderPath = "D:/open-ai-assitant/uploads"; // Specify the path to your folder
+  fs.readdir(folderPath, (err, files) => {
+    if (err) {
+      console.error("Error reading folder:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+    const fileList = [];
+    files.forEach((file) => {
+      const filePath = path.join(folderPath, file);
+      const fileStats = fs.statSync(filePath);
+      fileList.push({
+        name: file,
+        size: fileStats.size,
+        fileType: path.extname(file),
+        modifiedAt: fileStats.mtime,
+      });
+    });
+    res.json({ files: fileList });
+  });
+});
+
+// delete files
+app.delete("/delete-file/:filename", async (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, "uploads", filename); // Adjust the path as per your directory structure
+
+  try {
+    await fsPromise.unlink(filePath);
+    res.status(200).json({ message: "File deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+//to run all assistant hit this endpoints
+app.get("/get-all-assistant", async (req, res) => {
+  try {
+    let assistantList = await openai.beta.assistants.list({
+      order: "desc",
+      limit: "40",
+    });
+
+    while (assistantList.data.length > 0) {
+      for (let i = 0; i < assistantList.data.length; i++) {
+        try {
+          await openai.beta.assistants.del(assistantList.data[i].id);
+          console.log(
+            `Assistant ${assistantList.data[i].id} deleted successfully.`,
+            i
+          );
+        } catch (err) {
+          console.error(
+            `Error deleting assistant ${assistantList.data[i].id}: ${err.message}`
+          );
+        }
+      }
+
+      // Fetch the updated list of assistants after deletion
+      assistantList = await openai.beta.assistants.list({
+        order: "desc",
+        limit: "40",
+      });
+    }
+
+    res.status(200).json({ msg: "All assistants deleted successfully." });
+  } catch (err) {
+    console.error(`Error fetching assistant list: ${err.message}`);
+    res.status(500).json({ msg: "Error occurred while deleting assistants." });
+  }
+});
+//to run all assistant files hit this endpoints
+app.get("/delete-assistant-file", async (req, res) => {
+  try {
+    const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
+    let assistantDetails = JSON.parse(assistantData);
+    let assistantFiles = await openai.beta.assistants.files.list(
+      assistantDetails.assistantId
+    );
+    console.log("assistantFiles", assistantFiles);
+    while (assistantFiles.data.length > 0) {
+      for (let i = 0; i < assistantFiles.data.length; i++) {
+        try {
+          await openai.beta.assistants.files.del(
+            assistantDetails.assistantId,
+            assistantFiles[i].id
+          );
+        } catch (err) {
+          console.error(
+            `Error deleting assistant ${assistantFiles.data[i].id}: ${err.message}`
+          );
+        }
+      }
+
+      // Fetch the updated list of assistants after deletion
+      // assistantFiles = await openai.beta.assistants.files.list(
+      //   assistantDetails.assistantId
+      // );
+    }
+
+    res.status(200).json({ msg: "All assistants file deleted successfully." });
+  } catch (err) {
+    console.error(`Error fetching assistant list: ${err.message}`);
+    res.status(500).json({ msg: "Error occurred while deleting assistants." });
+  }
+});
+
 // Set up the server to listen on port 3000
 const port = 3000;
 app.listen(port, () => {
