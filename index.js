@@ -6,6 +6,7 @@ const fsPromise = require("fs").promises; // Using promises version of fs
 const path = require("path");
 // Create an Express application
 const app = express();
+const nodemailer = require("nodemailer");
 app.use(express.json());
 let instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
 
@@ -22,7 +23,7 @@ For Manual Job Description:
 1. Paste the manual job description provided by the user and validate the inclusion of all required information.
 2. Analyze the job description and ensure all required information is included. If anything is missing, ask one by one questions about all the the absent details. Additionally, pose other questions based on the manual job description to gain a clear understanding of the job requirements.
 
-Require questions for both AI-based and manual job description creation.
+Require questions for both AI-based and manual job description creation.Remember You have to ask these question one by one.
 
 1. Education Background: Specify the required educational qualifications for the position.
 2. Experience Requirement: Seek clarification on whether "3+ years" is a general requirement or specific to a certain position.
@@ -35,7 +36,7 @@ Require questions for both AI-based and manual job description creation.
 You are welcome to ask additional questions based on user responses and your knowledge. Ensure to validate all the answers for accuracy.
 
 Throughout the process, it is imperative to offer error messages for inaccuracies and prompt users for corrections. For instance, if "Finland" is entered as a position name, guide the user to rectify the error. Following these interactions, proceed to generate a well-formatted Markdown job description based on the collected information.
-`
+`;
 
 // import the required dependencies
 require("dotenv").config();
@@ -63,10 +64,8 @@ app.get("/create-assistant", async (req, res) => {
     const assistantData = await fsPromise.readFile(assistantFilePath, "utf8");
     let assistantDetails = JSON.parse(assistantData);
     assistantId = assistantDetails.assistantId;
-    console.log("\nExisting assistant detected.\n");
   } catch (error) {
     // If file does not exist or there is an error in reading it, create a new assistant
-    console.log("No existing assistant detected, creating new.\n");
     const assistantConfig = {
       name: "Hiring Manager Assistant",
       instructions: instruction,
@@ -138,10 +137,7 @@ app.post("/get-msg", async (req, res) => {
     const run = await openai.beta.threads.runs.create(threadId, {
       assistant_id: assistantId1,
     });
-    let runStatus = await openai.beta.threads.runs.retrieve(
-      threadId,
-      run.id
-    );
+    let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
     // Polling mechanism to see if runStatus is completed
     // This should be made more robust.
     while (runStatus.status !== "completed") {
@@ -170,9 +166,30 @@ app.post("/generate-json", async (req, res) => {
 
   const instruction = `from the conversation array please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point except from the job description, job description could be long and with proper markdown; here is conversation ${JSON.stringify(conversation)} array`;
 
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      {
+        role: "user",
+        content: instruction,
+      },
+    ],
+    temperature: 1,
+    max_tokens: 256,
+    top_p: 1,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+  });
+  res.status(200).json(response);
+});
 
-  console.log("instruction '= ", instruction);
+app.post("/create-summary", async (req, res) => {
+  const { conversation } = req.body;
+  // const instruction = `This is conversation between hiring manager and AI(chatbot) create summary  here is json of this conversation ${JSON.stringify(conversation)} array. You task is create simple summary around of this conversation so i can send this summary to hiring manager` ;
 
+  const instruction = `Create a summary of a conversation between a hiring manager and an AI chatbot regarding the details for a job position. The conversation covers various aspects such as educational qualifications, experience requirements, job location and type, special skills, responsibilities, and salary range. The AI chatbot assists the hiring manager by asking specific questions tailored to the job position provided by the manager. After gathering all necessary information, the chatbot generates a finalized job description in Markdown format, which the hiring manager reviews and confirms. The chatbot ensures satisfaction with the job description before concluding the conversation.  here is json of this conversation ${JSON.stringify(
+    conversation
+  )} array. You have to create summary using this conversation`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
@@ -188,8 +205,77 @@ app.post("/generate-json", async (req, res) => {
     frequency_penalty: 0,
     presence_penalty: 0,
   });
-  console.log("response", response);
-  res.status(200).json(response);
+
+  // Configure nodemailer to send email
+  const transporter = nodemailer.createTransport({
+    service: "Gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: false, // use SSL
+    auth: {
+      user: "mohduvesh043@gmail.com",
+      pass:process.env.SMPT_PASS
+    },
+  });
+
+  const emailTemplate = `
+    <html>
+    <head>
+        <style>
+            /* CSS styles for the email */
+            body {
+                font-family: Arial, sans-serif;
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+            }
+            h1 {
+                color: #333;
+            }
+            .summary{
+              font-bold:600
+            }
+            .logo{
+              display:flex;
+              justify-content:center;
+              align-items:center
+            }
+           
+        </style>
+    </head>
+    <body>
+        <div class="container">
+        <h1>Here is conversation Summary</h1>
+            <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
+            <h4 class="summary">${response.choices[0].message.content}</h4>
+        </div>
+    </body>
+    </html>
+`;
+
+  const mailOptions = {
+    from: "mohduvesh043@gmail.com",
+    to: "mohd.uvesh@jobgo.com",
+    subject: "Conversion Summary",
+    html: emailTemplate, // Use the email template as HTML content
+  };
+
+  // Send email
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.log(error);
+      res.status(500).send("Error sending email");
+    } else {
+      console.log("Email sent: " + info.response);
+      res.status(200).send("Email sent successfully");
+    }
+  });
+  // console.log("response", response.choices[0].message.content);
+  res.status(200).json(response.choices[0].message.content);
 });
 const multerStorage = multer.diskStorage({
   destination: async (req, file, cb) => {
@@ -324,7 +410,6 @@ app.get("/delete-assistant-file", async (req, res) => {
     let assistantFiles = await openai.beta.assistants.files.list(
       assistantDetails.assistantId
     );
-    console.log("assistantFiles", assistantFiles);
     while (assistantFiles.data.length > 0) {
       for (let i = 0; i < assistantFiles.data.length; i++) {
         try {
@@ -350,6 +435,83 @@ app.get("/delete-assistant-file", async (req, res) => {
     console.error(`Error fetching assistant list: ${err.message}`);
     res.status(500).json({ msg: "Error occurred while deleting assistants." });
   }
+});
+
+//send email
+
+// POST endpoint to handle summary data
+app.post("/send-summary", (req, res) => {
+  const { summary } = req.body;
+
+  // Configure nodemailer to send email
+  const transporter = nodemailer.createTransport({
+    service: "Gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: false, // use SSL
+    auth: {
+      user: "mohduvesh043@gmail.com",
+      pass: "wdkqbrurnfzlokvu",
+    },
+  });
+  const summar1 = `The hiring manager initiates a conversation with the AI chatbot, requesting assistance in gathering information for a job position. The manager provides the title of the position as "VUE JS". The chatbot asks specific questions to gather details, beginning with the required educational qualifications. The manager states that a B.tech in Computer Science is required. Moving on, the chatbot asks about the experience requirement for the Vue.js position. The manager specifies that the candidate should have 3+ years of experience. The chatbot then asks about the job location, to which the manager responds that it is a remote position. Next, the chatbot inquires about the job type. The manager confirms that it is a fully remote position. When asked about any special skills or experience required, the manager states that only basic Vue.js developer skills are required, without any additional skills or experiences. The chatbot then asks about the key responsibilities for the role. The manager suggests that the chatbot can write the responsibilities on its own. The conversation ends with the chatbot generating a finalized job description in Markdown format, which the hiring manager reviews and confirms. The chatbot ensures that the manager is satisfied with the job description before concluding the conversation.`;
+  // Email template
+  const emailTemplate = `
+    <html>
+    <head>
+        <style>
+            /* CSS styles for the email */
+            body {
+                font-family: Arial, sans-serif;
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+            }
+            h1 {
+                color: #333;
+            }
+            .summary{
+              font-bold:600
+            }
+            .logo{
+              display:flex;
+              justify-content:center;
+              align-items:center
+            }
+           
+        </style>
+    </head>
+    <body>
+        <div class="container">
+        <h1>Here is conversation Summary</h1>
+            <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
+            <h4 class="summary">${summar1}</h4>
+        </div>
+    </body>
+    </html>
+`;
+
+  const mailOptions = {
+    from: "mohduvesh043@gmail.com",
+    to: "mohd.uvesh@jobgo.com",
+    subject: "Conversion Summary",
+    html: emailTemplate, // Use the email template as HTML content
+  };
+
+  // Send email
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.log(error);
+      res.status(500).send("Error sending email");
+    } else {
+      console.log("Email sent: " + info.response);
+      res.status(200).send("Email sent successfully");
+    }
+  });
 });
 
 // Set up the server to listen on port 3000
