@@ -7,7 +7,7 @@ const path = require("path");
 // Create an Express application
 const app = express();
 app.use(express.json());
-const instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
+let instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
 
 First, you have to ask the title of the open position 
 
@@ -93,6 +93,35 @@ app.get("/create-thread", async (req, res) => {
   res.status(200).json({ threadId: thread });
 });
 
+//Prompt Get 
+app.get("/getPrompt", async (req, res) => {
+  // const { prompt } = req.body;
+
+  // if(prompt){
+  //   instruction = prompt
+  // }
+
+  console.log("prompt '= ", instruction);
+
+  res.status(200).json({ "instruction": instruction });
+});
+
+//Prompt Edit 
+app.post("/updatePrompt", async (req, res) => {
+  const { prompt } = req.body;
+
+  if (prompt) {
+    instruction = prompt
+  }
+
+  console.log("prompt '= ", prompt);
+
+  res.status(200).json(prompt);
+});
+
+// console.log("instruction: - ", instruction);
+
+
 app.post("/get-msg", async (req, res) => {
   const { msg } = req.body;
   const { threadId } = req.body;
@@ -138,7 +167,7 @@ app.post("/get-msg", async (req, res) => {
 });
 app.post("/generate-json", async (req, res) => {
   const { conversation } = req.body;
-  
+
   const instruction = `from the conversation array please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point except from the job description, job description could be long and with proper markdown; here is conversation ${JSON.stringify(conversation)} array`;
 
 
@@ -173,7 +202,7 @@ const multerStorage = multer.diskStorage({
       // const assistantFilePath = path.join(folderPath, file.originalname);
 
       const ext = file.mimetype.split("/")[1];
- 
+
       const folderPath = path.join(__dirname, "uploads");
       const assistantFilePath = path.join(folderPath, file.originalname);
       const uploadedFile = await openai.files.create({
