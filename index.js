@@ -191,6 +191,8 @@ app.post("/create-summary", async (req, res) => {
     conversation
   )} array. You have to create summary using this conversation`;
 
+  console.log("aa", JSON.stringify(conversation));
+
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     messages: [
@@ -259,7 +261,7 @@ app.post("/create-summary", async (req, res) => {
 
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
-    to: "mohd.uvesh@jobgo.com",
+    to: "bhargav.patel@jobgo.com",
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
