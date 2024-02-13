@@ -188,7 +188,7 @@ app.post("/create-summary", async (req, res) => {
     secure: false, // use SSL
     auth: {
       user: "mohduvesh043@gmail.com",
-      pass: "wdkqbrurnfzlokvu",
+      pass:process.env.SMPT_PASS
     },
   });
 
