@@ -4,11 +4,23 @@ const multer = require("multer");
 const fs = require("fs");
 const fsPromise = require("fs").promises; // Using promises version of fs
 const path = require("path");
+const { Server } = require("socket.io");
+const Server1 = require("http");
+
 // Create an Express application
 const app = express();
 const nodemailer = require("nodemailer");
 app.use(express.json());
-let instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
+const server = Server1.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3001",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+const instruction = `As the hiring manager's assistant, your core responsibilities involve assisting users in crafting job descriptions, refining their quality, and generating transparent Markdown-based descriptions for upcoming positions.
 
 First, you have to ask the title of the open position 
 
@@ -43,6 +55,7 @@ require("dotenv").config();
 const OpenAI = require("openai");
 const http = require("http");
 var cors = require("cors");
+const { createDiffieHellmanGroup } = require("crypto");
 
 // import the required dependencies
 
@@ -56,15 +69,19 @@ let assistant = null;
 let thread = null;
 let assistantId;
 app.get("/create-assistant", async (req, res) => {
-  const assistantFilePath = "./assistant.json";
+  // const assistantFilePath = "./assistant.json";
+  console.log("create-assistant");
   // Check if the assistant.json file exists
   try {
-    const folderPath = path.join(__dirname, "uploads");
-    const assistantFilePath = path.join(folderPath, file.originalname);
-    const assistantData = await fsPromise.readFile(assistantFilePath, "utf8");
+    console.log("create-assistant try 1");
+    const assistantData = await fsPromise.readFile('./assistant.json', "utf8");
     let assistantDetails = JSON.parse(assistantData);
     assistantId = assistantDetails.assistantId;
+    console.log("create-assistant try 2");
+    res.status(200).json({ assistantId, msg: "Assistant Is created" });
   } catch (error) {
+    console.log("create-assistant catch1");
+   
     // If file does not exist or there is an error in reading it, create a new assistant
     const assistantConfig = {
       name: "Hiring Manager Assistant",
@@ -82,55 +99,30 @@ app.get("/create-assistant", async (req, res) => {
       JSON.stringify(assistantDetails, null, 2)
     );
     assistantId = assistantDetails.assistantId;
-    res.status(200).json("Assistant Is created");
+    res.status(200).json({ assistantId, msg: "Assistant Is created" });
+    console.log("create-assistant catch 2");
   }
 });
 app.get("/create-thread", async (req, res) => {
-  console.log("/create-thread");
+  console.log("create thread")
+
   // Create a thread
   thread = await openai.beta.threads.create();
   res.status(200).json({ threadId: thread });
 });
 
-//Prompt Get 
-app.get("/getPrompt", async (req, res) => {
-  // const { prompt } = req.body;
-
-  // if(prompt){
-  //   instruction = prompt
-  // }
-
-  console.log("prompt '= ", instruction);
-
-  res.status(200).json({ "instruction": instruction });
-});
-
-//Prompt Edit 
-app.post("/updatePrompt", async (req, res) => {
-  const { prompt } = req.body;
-
-  if (prompt) {
-    instruction = prompt
-  }
-
-  console.log("prompt '= ", prompt);
-
-  res.status(200).json(prompt);
-});
-
-// console.log("instruction: - ", instruction);
-
-
 app.post("/get-msg", async (req, res) => {
   const { msg } = req.body;
   const { threadId } = req.body;
+  const role = req.body.user || "user";
+ 
   try {
     const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
     let assistantDetails = JSON.parse(assistantData);
     let assistantId1 = assistantDetails.assistantId;
     // Pass in the user question into the existing thread
     await openai.beta.threads.messages.create(threadId, {
-      role: "user",
+      role,
       content: msg,
     });
     // Use runs to wait for the assistant response and then retrieve it
@@ -164,7 +156,10 @@ app.post("/get-msg", async (req, res) => {
 app.post("/generate-json", async (req, res) => {
   const { conversation } = req.body;
 
-  const instruction = `from the conversation array please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point except from the job description, job description could be long and with proper markdown; here is conversation ${JSON.stringify(conversation)} array`;
+  const instruction = `from the conversation array please create the Jason which has the key position name, salary, job location, experience, qualification, and job description you have to fill all the values from the above conversation, and value should be to the point except from the job description, job description could be long and with proper markdown; here is conversation ${JSON.stringify(
+    conversation
+  )} array`;
+
 
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
@@ -191,8 +186,6 @@ app.post("/create-summary", async (req, res) => {
     conversation
   )} array. You have to create summary using this conversation`;
 
-  console.log("aa", JSON.stringify(conversation));
-
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     messages: [
@@ -216,7 +209,7 @@ app.post("/create-summary", async (req, res) => {
     secure: false, // use SSL
     auth: {
       user: "mohduvesh043@gmail.com",
-      pass:process.env.SMPT_PASS
+      pass: process.env.SMPT_PASS
     },
   });
 
@@ -261,7 +254,7 @@ app.post("/create-summary", async (req, res) => {
 
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
-    to: "bhargav.patel@jobgo.com",
+    to: "mohd.uvesh@jobgo.com",
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
@@ -406,6 +399,7 @@ app.get("/get-all-assistant", async (req, res) => {
 });
 //to run all assistant files hit this endpoints
 app.get("/delete-assistant-file", async (req, res) => {
+  console.log("elete-assistant-file");
   try {
     const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
     let assistantDetails = JSON.parse(assistantData);
@@ -438,13 +432,19 @@ app.get("/delete-assistant-file", async (req, res) => {
     res.status(500).json({ msg: "Error occurred while deleting assistants." });
   }
 });
+app.delete("/delete-thread/:threadid",async(req,res)=>{
+  try {
+     await openai.beta.threads.del( req.params.threadid);
+    res.status(200).json({ msg: "Thread is delete successfully." });
+
+  } catch (error) {
+    res.status(500).json({ msg: "Error occurred while deleting thread." });
+  }
+})
+
 
 //send email
-
-// POST endpoint to handle summary data
-app.post("/send-summary", (req, res) => {
-  const { summary } = req.body;
-
+const sendEmail = (sendData) => {
   // Configure nodemailer to send email
   const transporter = nodemailer.createTransport({
     service: "Gmail",
@@ -456,54 +456,50 @@ app.post("/send-summary", (req, res) => {
       pass: "wdkqbrurnfzlokvu",
     },
   });
-  const summar1 = `The hiring manager initiates a conversation with the AI chatbot, requesting assistance in gathering information for a job position. The manager provides the title of the position as "VUE JS". The chatbot asks specific questions to gather details, beginning with the required educational qualifications. The manager states that a B.tech in Computer Science is required. Moving on, the chatbot asks about the experience requirement for the Vue.js position. The manager specifies that the candidate should have 3+ years of experience. The chatbot then asks about the job location, to which the manager responds that it is a remote position. Next, the chatbot inquires about the job type. The manager confirms that it is a fully remote position. When asked about any special skills or experience required, the manager states that only basic Vue.js developer skills are required, without any additional skills or experiences. The chatbot then asks about the key responsibilities for the role. The manager suggests that the chatbot can write the responsibilities on its own. The conversation ends with the chatbot generating a finalized job description in Markdown format, which the hiring manager reviews and confirms. The chatbot ensures that the manager is satisfied with the job description before concluding the conversation.`;
-  // Email template
   const emailTemplate = `
-    <html>
-    <head>
-        <style>
-            /* CSS styles for the email */
-            body {
-                font-family: Arial, sans-serif;
-            }
-            .container {
-                max-width: 600px;
-                margin: 0 auto;
-                padding: 20px;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-            }
-            h1 {
-                color: #333;
-            }
-            .summary{
-              font-bold:600
-            }
-            .logo{
-              display:flex;
-              justify-content:center;
-              align-items:center
-            }
-           
-        </style>
-    </head>
-    <body>
-        <div class="container">
-        <h1>Here is conversation Summary</h1>
-            <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
-            <h4 class="summary">${summar1}</h4>
-        </div>
-    </body>
-    </html>
-`;
-
+  <html>
+  <head>
+      <style>
+          /* CSS styles for the email */
+          body {
+              font-family: Arial, sans-serif;
+          }
+          .container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              border: 1px solid #ccc;
+              border-radius: 5px;
+          }
+          h1 {
+              color: #333;
+          }
+          .summary{
+            font-bold:600
+          }
+          .logo{
+            display:flex;
+            justify-content:center;
+            align-items:center
+          }
+         
+      </style>
+  </head>
+  <body>
+      <div class="container">
+      <h1>Here is conversation Summary</h1>
+          <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
+          <h4 class="summary">${sendData}</h4>
+      </div>
+  </body>
+  </html>
+`; 0
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
     to: "mohd.uvesh@jobgo.com",
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
-
   // Send email
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
@@ -514,10 +510,124 @@ app.post("/send-summary", (req, res) => {
       res.status(200).send("Email sent successfully");
     }
   });
+}
+// POST endpoint to handle summary data
+app.post("/send-summary", (req, res) => {
+  const { summary } = req.body;
+
+  // sendEmail(summary)
+
 });
 
 // Set up the server to listen on port 3000
-const port = 3000;
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+
+io.on("connection", (socket) => {
+  console.log("connection", socket.id);
+  socket.on("message", ({ message, roomId }) => {
+    console.log(" message,roomId ", message, roomId);
+
+    socket.to(roomId).emit("receive-message", message);
+    // socket.to(roomId).emit("receive-message", message);
+    socket.emit("receive-message", message);
+  });
+  socket.on("create-room", ({ roomId, threadId }) => {
+    console.log("roomId, threadId",roomId, threadId);
+    // sendEmail(`  http://localhost:8080?roomid=${roomId}&threadid=${threadId}`)
+    socket.join(roomId);
+  })
+  socket.on("post-ai-response", async ({ msg, threadId, roomId, role }) => {
+    console.log("post-ai-response");
+    console.log({ msg, threadId, roomId, role });
+    // const obj1={
+    //   msg: query,
+    //   threadId: threadId.value,
+    // }
+    // const { msg } = req.body;
+    // const { threadId } = req.body;
+    try {
+      if (role === 'member') {
+        console.log("member");
+      const response=  await openai.beta.threads.messages.create(
+          threadId,
+          { role, content: msg }
+        );
+console.log("response member",response)
+      }
+      else {
+        console.log("member does not exist");
+        const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
+        let assistantDetails = JSON.parse(assistantData);
+        let assistantId1 = assistantDetails.assistantId;
+        // Pass in the user question into the existing thread
+        await openai.beta.threads.messages.create(threadId, {
+          role: role,
+          content: msg,
+        });
+        // Use runs to wait for the assistant response and then retrieve it
+        const run = await openai.beta.threads.runs.create(threadId, {
+          assistant_id: assistantId1,
+        });
+        let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+        // Polling mechanism to see if runStatus is completed
+        // This should be made more robust.
+        while (runStatus.status !== "completed") {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+        }
+        // Get the last assistant message from the messages array
+        const messages = await openai.beta.threads.messages.list(threadId);
+        // Find the last message for the current run
+        const lastMessageForRun = messages.data
+          .filter(
+            (message) => message.run_id === run.id && message.role === "assistant"
+          )
+          .pop();
+        // If an assistant message is found,  it
+        if (lastMessageForRun) {
+          socket.to(roomId).emit("get-ai-message", lastMessageForRun.content[0].text.value);
+          socket.emit("get-ai-message", lastMessageForRun.content[0].text.value);
+          //  socket.to(roomId).emit("get-ai-message", lastMessageForRun.content[0].text.value);
+          // res.status(200).json(`${lastMessageForRun.content[0].text.value} \n`);
+        }
+      }
+
+    } catch (error) {
+      console.log("error",error);
+      socket.to(roomId).emit("get-ai-message", "error");
+socket.emit("get-ai-message", "error");
+      //  socket.to(roomId).emit("get-ai-message","error");
+      // console.error(error);
+    }
+
+  });
+
+  socket.on("join-room", (room) => {
+    socket.join(room);
+ 
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User Disconnected", socket.id);
+  });
+});
+
+app.get("/get-messages", async (req, res) => {
+  const { threadId } = req.query;
+
+
+  try {
+    const threadMessages = await openai.beta.threads.messages.list(
+      threadId
+    );
+    res.status(200).json({ messages: threadMessages.body.data });
+
+  }
+  catch (err) {
+    console.error(`Error fetching message list list: ${err.message}`);
+    res.status(500).json({ msg: "Error fetching message list list:" });
+  }
+
+})
+server.listen(3000, () => {
+  console.log(`Server is running on port ${3000}`);
 });
