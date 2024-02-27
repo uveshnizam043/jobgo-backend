@@ -260,7 +260,7 @@ app.post("/create-summary", async (req, res) => {
 
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
-    to: "mohd.uvesh@jobgo.com",
+    to: "bhargav.patel@jobgo.com",
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
@@ -502,7 +502,7 @@ const sendEmail = (sendData) => {
 `; 0
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
-    to: "mohd.uvesh@jobgo.com",
+    to: "bhargav.patel@jobgo.com",
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
