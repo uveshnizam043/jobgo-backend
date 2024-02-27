@@ -56,6 +56,7 @@ const OpenAI = require("openai");
 const http = require("http");
 var cors = require("cors");
 const { createDiffieHellmanGroup } = require("crypto");
+const { threadId } = require("worker_threads");
 
 // import the required dependencies
 
@@ -81,7 +82,7 @@ app.get("/create-assistant", async (req, res) => {
     res.status(200).json({ assistantId, msg: "Assistant Is created" });
   } catch (error) {
     console.log("create-assistant catch1");
-   
+
     // If file does not exist or there is an error in reading it, create a new assistant
     const assistantConfig = {
       name: "Hiring Manager Assistant",
@@ -109,13 +110,18 @@ app.get("/create-thread", async (req, res) => {
   // Create a thread
   thread = await openai.beta.threads.create();
   res.status(200).json({ threadId: thread });
+  console.log("create thread 1")
+
 });
+app.get("/", (req, res) => {
+  res.status(200).json({ msg: 'successful' });
+})
 
 app.post("/get-msg", async (req, res) => {
   const { msg } = req.body;
   const { threadId } = req.body;
-  const role = req.body.user || "user";
- 
+  const role = "user";
+
   try {
     const assistantData = await fsPromise.readFile("./assistant.json", "utf8");
     let assistantDetails = JSON.parse(assistantData);
@@ -432,9 +438,9 @@ app.get("/delete-assistant-file", async (req, res) => {
     res.status(500).json({ msg: "Error occurred while deleting assistants." });
   }
 });
-app.delete("/delete-thread/:threadid",async(req,res)=>{
+app.delete("/delete-thread/:threadid", async (req, res) => {
   try {
-     await openai.beta.threads.del( req.params.threadid);
+    await openai.beta.threads.del(req.params.threadid);
     res.status(200).json({ msg: "Thread is delete successfully." });
 
   } catch (error) {
@@ -487,8 +493,8 @@ const sendEmail = (sendData) => {
   </head>
   <body>
       <div class="container">
-      <h1>Here is conversation Summary</h1>
-          <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
+      <h1>Here is Live conversation Link</h1>
+          // <div class="logo"><a href="https://imgbb.com/"><img src="https://i.ibb.co/MNgNVHJ/logo.png" alt="logo" border="0" /></a></div>
           <h4 class="summary">${sendData}</h4>
       </div>
   </body>
@@ -518,23 +524,40 @@ app.post("/send-summary", (req, res) => {
   // sendEmail(summary)
 
 });
+app.post("/create-message", async (req, res) => {
 
+  const msg = req.body.msg
+  const role = req.body.role
+  const threadId = req.body.threadId
+  const response = await openai.beta.threads.messages.create(
+    threadId,
+    {
+      role: "user", content: msg
+    }
+  );
+  console.log("response member", response.content[0].text.value)
+  res.status(200).json({ msg: response.content[0].text.value })
+})
 // Set up the server to listen on port 3000
 
 io.on("connection", (socket) => {
   console.log("connection", socket.id);
-  socket.on("message", ({ message, roomId }) => {
-    console.log(" message,roomId ", message, roomId);
-
-    socket.to(roomId).emit("receive-message", message);
+  socket.on("message", ({ message, roomId, role }) => {
     // socket.to(roomId).emit("receive-message", message);
     socket.emit("receive-message", message);
+    socket.broadcast.emit("receive-message",message)
+  });
+  socket.on("member-message", ({ message, roomId, role }) => {
+    // socket.to(roomId).emit("receive-message", message);
+    socket.emit("receive-member-message", message);
+    socket.broadcast.emit("receive-member-message",message)
   });
   socket.on("create-room", ({ roomId, threadId }) => {
-    console.log("roomId, threadId",roomId, threadId);
-    // sendEmail(`  http://localhost:8080?roomid=${roomId}&threadid=${threadId}`)
+    console.log("roomId, threadId", roomId, threadId);
+    sendEmail(`  http://localhost:3001/chat?room=${roomId}&thread=${threadId}`)
     socket.join(roomId);
   })
+  
   socket.on("post-ai-response", async ({ msg, threadId, roomId, role }) => {
     console.log("post-ai-response");
     console.log({ msg, threadId, roomId, role });
@@ -584,7 +607,7 @@ console.log("response member",response)
           .pop();
         // If an assistant message is found,  it
         if (lastMessageForRun) {
-          socket.to(roomId).emit("get-ai-message", lastMessageForRun.content[0].text.value);
+          socket.broadcast.emit("get-ai-message", lastMessageForRun.content[0].text.value);
           socket.emit("get-ai-message", lastMessageForRun.content[0].text.value);
           //  socket.to(roomId).emit("get-ai-message", lastMessageForRun.content[0].text.value);
           // res.status(200).json(`${lastMessageForRun.content[0].text.value} \n`);
@@ -601,9 +624,10 @@ socket.emit("get-ai-message", "error");
 
   });
 
+
   socket.on("join-room", (room) => {
     socket.join(room);
- 
+
   });
 
   socket.on("disconnect", () => {
@@ -613,7 +637,7 @@ socket.emit("get-ai-message", "error");
 
 app.get("/get-messages", async (req, res) => {
   const { threadId } = req.query;
-
+  console.log("threadId", threadId)
 
   try {
     const threadMessages = await openai.beta.threads.messages.list(
