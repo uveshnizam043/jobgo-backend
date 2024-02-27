@@ -554,7 +554,7 @@ io.on("connection", (socket) => {
   });
   socket.on("create-room", ({ roomId, threadId }) => {
     console.log("roomId, threadId", roomId, threadId);
-    sendEmail(`  http://localhost:3001/chat?room=${roomId}&thread=${threadId}`)
+    sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}`)
     socket.join(roomId);
   })
   
