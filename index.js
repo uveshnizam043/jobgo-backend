@@ -15,7 +15,7 @@ const server = Server1.createServer(app);
 const io = new Server(server, {
   cors: {
     // origin: "http://localhost:3001",
-    origin: '*',  
+    origin: '*',
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -545,25 +545,28 @@ io.on("connection", (socket) => {
   console.log("connection", socket.id);
   socket.on("message", ({ message, roomId, role }) => {
     // socket.to(roomId).emit("receive-message", message);
-    socket.emit("receive-message", message);
-    socket.broadcast.emit("receive-message",message)
+    socket.emit("receive-message", { message, role });
+    socket.broadcast.emit("receive-message", { message, role })
   });
   socket.on("member-message", ({ message, roomId, role }) => {
     // socket.to(roomId).emit("receive-message", message);
-    socket.emit("receive-member-message", message);
-    socket.broadcast.emit("receive-member-message",message)
+    socket.emit("receive-member-message", { message, role });
+    socket.broadcast.emit("receive-member-message", { message, role })
   });
   socket.on("create-room", ({ roomId, threadId }) => {
-    console.log("roomId, threadId", roomId, threadId);
-    const senderEmail=["bhargav.patel@jobgo.com","mohd.uvesh@jobgo.com"]
+    console.log("roomId", roomId);
+    console.log("threadId", threadId);
+    const senderEmail = ["bhargav.patel@jobgo.com", "mohd.uvesh@jobgo.com"]
     for (let index = 0; index < senderEmail.length; index++) {
       const email = senderEmail[index];
-      sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${email}`)
-      
+      const username = senderEmail[index].split('.')?.[0];
+      const usernameCapital = username.charAt(0).toUpperCase() + username.slice(1);
+
+      sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${usernameCapital}`)
     }
     socket.join(roomId);
   })
-  
+
   socket.on("post-ai-response", async ({ msg, threadId, roomId, role }) => {
     console.log("post-ai-response");
     console.log({ msg, threadId, roomId, role });
@@ -576,11 +579,11 @@ io.on("connection", (socket) => {
     try {
       if (role === 'member') {
         console.log("member");
-      const response=  await openai.beta.threads.messages.create(
+        const response = await openai.beta.threads.messages.create(
           threadId,
           { role, content: msg }
         );
-console.log("response member",response)
+        console.log("response member", response)
       }
       else {
         console.log("member does not exist");
@@ -621,9 +624,9 @@ console.log("response member",response)
       }
 
     } catch (error) {
-      console.log("error",error);
+      console.log("error", error);
       socket.to(roomId).emit("get-ai-message", "error");
-socket.emit("get-ai-message", "error");
+      socket.emit("get-ai-message", "error");
       //  socket.to(roomId).emit("get-ai-message","error");
       // console.error(error);
     }
