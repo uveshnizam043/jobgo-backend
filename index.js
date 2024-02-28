@@ -555,7 +555,12 @@ io.on("connection", (socket) => {
   });
   socket.on("create-room", ({ roomId, threadId }) => {
     console.log("roomId, threadId", roomId, threadId);
-    sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}`)
+    const senderEmail=["bhargav.patel@jobgo.com","mohd.uvesh@jobgo.com"]
+    for (let index = 0; index < senderEmail.length; index++) {
+      const email = senderEmail[index];
+      sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${email}`)
+      
+    }
     socket.join(roomId);
   })
   
