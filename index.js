@@ -582,6 +582,8 @@ io.on("connection", (socket) => {
     }]  
     for (let index = 0; index < senderEmail.length; index++) {
       const item = senderEmail[index];
+      console.log("roomId:-", roomId);
+      console.log("threadId:-", threadId);
       sendEmail(item.email,`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`);
     }
     socket.join(roomId);
