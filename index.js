@@ -439,6 +439,25 @@ app.get("/delete-assistant-file", async (req, res) => {
     res.status(500).json({ msg: "Error occurred while deleting assistants." });
   }
 });
+app.get("/send-email",async(req,res)=>{
+
+    const roomId="roomid1"
+    const threadId="threadId1"
+    const senderEmail=[{
+      name:"Bhargav",
+      email:'bhargav.patel@jobgo.com'
+    },{
+      name:"Uvesh",
+      email:'mohd.uvesh@jobgo.com'
+    }]
+    console.log(senderEmail.length);
+    
+    for (let index = 0; index < senderEmail.length; index++) {
+      const item = senderEmail[index];
+      sendEmail(item.email,`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`)
+      
+    }
+})
 app.delete("/delete-thread/:threadid", async (req, res) => {
   try {
     await openai.beta.threads.del(req.params.threadid);
@@ -451,7 +470,7 @@ app.delete("/delete-thread/:threadid", async (req, res) => {
 
 
 //send email
-const sendEmail = (sendData) => {
+const sendEmail = (to,sendData) => {
   // Configure nodemailer to send email
   const transporter = nodemailer.createTransport({
     service: "Gmail",
@@ -503,7 +522,7 @@ const sendEmail = (sendData) => {
 `; 0
   const mailOptions = {
     from: "mohduvesh043@gmail.com",
-    to: "fredrik.sundell@jobgo.com",
+    to: to,
     subject: "Conversion Summary",
     html: emailTemplate, // Use the email template as HTML content
   };
@@ -554,15 +573,16 @@ io.on("connection", (socket) => {
     socket.broadcast.emit("receive-member-message", { message, role })
   });
   socket.on("create-room", ({ roomId, threadId }) => {
-    console.log("roomId", roomId);
-    console.log("threadId", threadId);
-    const senderEmail = ["bhargav.patel@jobgo.com", "mohd.uvesh@jobgo.com"]
+    const senderEmail=[{
+      name:"Bhargav",
+      email:'bhargav.patel@jobgo.com'
+    },{
+      name:"Uvesh",
+      email:'mohd.uvesh@jobgo.com'
+    }]  
     for (let index = 0; index < senderEmail.length; index++) {
-      const email = senderEmail[index];
-      const username = senderEmail[index].split('.')?.[0];
-      const usernameCapital = username.charAt(0).toUpperCase() + username.slice(1);
-
-      sendEmail(`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${usernameCapital}`)
+      const item = senderEmail[index];
+      sendEmail(item.email,`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`);
     }
     socket.join(roomId);
   })
