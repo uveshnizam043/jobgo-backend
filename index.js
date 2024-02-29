@@ -439,24 +439,24 @@ app.get("/delete-assistant-file", async (req, res) => {
     res.status(500).json({ msg: "Error occurred while deleting assistants." });
   }
 });
-app.get("/send-email",async(req,res)=>{
+app.get("/send-email", async (req, res) => {
 
-    const roomId="roomid1"
-    const threadId="threadId1"
-    const senderEmail=[{
-      name:"Bhargav",
-      email:'bhargav.patel@jobgo.com'
-    },{
-      name:"Uvesh",
-      email:'mohd.uvesh@jobgo.com'
-    }]
-    console.log(senderEmail.length);
-    
-    for (let index = 0; index < senderEmail.length; index++) {
-      const item = senderEmail[index];
-      sendEmail(item.email,`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`)
-      
-    }
+  const roomId = "roomid1"
+  const threadId = "threadId1"
+  const senderEmail = [{
+    name: "Bhargav",
+    email: 'bhargav.patel@jobgo.com'
+  }, {
+    name: "Uvesh",
+    email: 'mohd.uvesh@jobgo.com'
+  }]
+  console.log(senderEmail.length);
+
+  for (let index = 0; index < senderEmail.length; index++) {
+    const item = senderEmail[index];
+    sendEmail(item.email, `http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`)
+
+  }
 })
 app.delete("/delete-thread/:threadid", async (req, res) => {
   try {
@@ -470,7 +470,7 @@ app.delete("/delete-thread/:threadid", async (req, res) => {
 
 
 //send email
-const sendEmail = (to,sendData) => {
+const sendEmail = (to, sendData) => {
   // Configure nodemailer to send email
   const transporter = nodemailer.createTransport({
     service: "Gmail",
@@ -573,25 +573,25 @@ io.on("connection", (socket) => {
     socket.broadcast.emit("receive-member-message", { message, role })
   });
   socket.on("create-room", ({ roomId, threadId }) => {
-    const senderEmail=[{
-      name:"Bhargav",
-      email:'bhargav.patel@jobgo.com'
-    },{
-      name:"Uvesh",
-      email:'mohd.uvesh@jobgo.com'
-    }]  
+    const senderEmail = [{
+      name: "Bhargav",
+      email: 'bhargav.patel@jobgo.com'
+    }, {
+      name: "Uvesh",
+      email: 'mohd.uvesh@jobgo.com'
+    }]
     for (let index = 0; index < senderEmail.length; index++) {
       const item = senderEmail[index];
       console.log("roomId:-", roomId);
       console.log("threadId:-", threadId);
-      sendEmail(item.email,`http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`);
+      sendEmail(item.email, `http://139.59.92.77:7890/chat?room=${roomId}&thread=${threadId}&user=${item.name}`);
     }
     socket.join(roomId);
   })
 
-  socket.on("post-ai-response", async ({ msg, threadId, roomId, role }) => {
+  socket.on("post-ai-response", async ({ msg, threadId, roomId, role, userName }) => {
     console.log("post-ai-response");
-    console.log({ msg, threadId, roomId, role });
+    console.log({ msg, threadId, roomId, role, userName });
     // const obj1={
     //   msg: query,
     //   threadId: threadId.value,
@@ -603,7 +603,7 @@ io.on("connection", (socket) => {
         console.log("member");
         const response = await openai.beta.threads.messages.create(
           threadId,
-          { role, content: msg }
+          { role, content: msg, metadata: { userName } }
         );
         console.log("response member", response)
       }
@@ -613,10 +613,12 @@ io.on("connection", (socket) => {
         let assistantDetails = JSON.parse(assistantData);
         let assistantId1 = assistantDetails.assistantId;
         // Pass in the user question into the existing thread
-        await openai.beta.threads.messages.create(threadId, {
+        const RESdATA = await openai.beta.threads.messages.create(threadId, {
           role: role,
           content: msg,
+          metadata: { userName }
         });
+        console.log("RESdATA  : ", RESdATA )
         // Use runs to wait for the assistant response and then retrieve it
         const run = await openai.beta.threads.runs.create(threadId, {
           assistant_id: assistantId1,
@@ -630,6 +632,7 @@ io.on("connection", (socket) => {
         }
         // Get the last assistant message from the messages array
         const messages = await openai.beta.threads.messages.list(threadId);
+        console.log("messages :- ", messages);
         // Find the last message for the current run
         const lastMessageForRun = messages.data
           .filter(
@@ -638,6 +641,7 @@ io.on("connection", (socket) => {
           .pop();
         // If an assistant message is found,  it
         if (lastMessageForRun) {
+          console.log("lastMessageForRun.content[0].text.value :- ", lastMessageForRun)
           socket.broadcast.emit("get-ai-message", lastMessageForRun.content[0].text.value);
           socket.emit("get-ai-message", lastMessageForRun.content[0].text.value);
           //  socket.to(roomId).emit("get-ai-message", lastMessageForRun.content[0].text.value);
